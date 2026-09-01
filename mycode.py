@@ -14,8 +14,8 @@ new_row_loc = {'Compound': 'Acetone', 'Molecular weight': 58.08, 'TPSA': 20.23}
 df.loc[len(df.index)] = new_row_loc
 
 # # # Adding new row to df for V3
-# new_row_loc2 = {'Compound': 'GF2', 'Molecular weight': 30.0, 'TPSA': 15.4}
-# df.loc[len(df.index)] = new_row_loc2
+new_row_loc2 = {'Compound': 'GF2', 'Molecular weight': 30.0, 'TPSA': 15.4}
+df.loc[len(df.index)] = new_row_loc2
 
 # Ensure the "data" directory exists at the root level
 data_dir = 'data'

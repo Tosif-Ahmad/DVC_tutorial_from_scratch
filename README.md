@@ -2,9 +2,87 @@
 
 A beginner-friendly, hands-on tutorial showing how **Git versions code and DVC versions data**.
 
+> **Level:** Beginner · **Tools:** Git, Python, pandas, DVC · **Example:** Chemistry dataset · **Data versions:** 3
+
 This project creates a small chemistry dataset containing compounds and molecular features, tracks the generated `data/` directory with DVC, and demonstrates three data versions. The example uses a local folder as DVC storage so you can learn the complete workflow without creating a cloud account.
 
 > **Important:** the folder is named `S3` for learning purposes, but it is **not Amazon S3**. It is an ordinary local directory located beside the Git repository.
+
+## Quick navigation
+
+- [Why DVC?](#why-do-we-need-dvc)
+- [Git and DVC responsibilities](#git-and-dvc-responsibilities)
+- [Project structure](#project-structure)
+- [Quick start](#quick-start)
+- [Build the project from scratch](#build-the-project-from-scratch)
+- [Create a new data version](#create-a-new-data-version)
+- [Rebuild historical versions](#rebuild-all-historical-versions-after-a-fresh-clone)
+- [Restore an older version](#restore-an-older-code-and-data-version)
+- [Troubleshooting](#common-mistakes-and-solutions)
+- [Additional DVC commands](#additional-useful-dvc-commands)
+
+## Tutorial at a glance
+
+| Question | Answer |
+| --- | --- |
+| What does the Python script produce? | `data/sample_data.csv` |
+| What does Git track? | Code, configuration, README, and `data.dvc` |
+| What does DVC track? | The generated `data/` directory |
+| Where is the DVC cache? | `.dvc/cache/` |
+| Where is the tutorial remote? | `../S3/` |
+| How many data versions exist? | Three: V1, V2, and V3 |
+| How do I save a changed dataset? | `dvc add data/` followed by `dvc push` |
+| How do I recover the selected dataset? | `dvc pull` or `dvc checkout` |
+
+---
+
+## Why do we need DVC?
+
+Git is excellent for source code because code files are usually small and text-based. Datasets and trained models are often much larger and may change many times. Storing every large data version directly in Git can make a repository slow and difficult to clone.
+
+DVC solves this by separating the **data itself** from the **small file that identifies the data**:
+
+1. The actual dataset is stored in DVC's cache and remote storage.
+2. DVC calculates a unique content hash for that dataset.
+3. The hash is written into a small file such as `data.dvc`.
+4. Git tracks and versions `data.dvc` alongside the code.
+5. When you switch Git commits, you also switch to the pointer for the corresponding data version.
+6. `dvc checkout` or `dvc pull` uses that pointer to restore the correct dataset.
+
+This produces a connection between each code version and the data version used with it.
+
+## A simple mental model
+
+Think of Git and DVC as two cooperating librarians:
+
+- **Git** keeps the instruction book (`mycode.py`) and a catalogue card (`data.dvc`).
+- **DVC** keeps the large box containing the actual dataset.
+- **The hash inside `data.dvc`** is the catalogue number that tells DVC which box to retrieve.
+
+The normal versioning cycle is:
+
+```text
+Change code → Generate data → dvc add → Git commit → dvc push → Git push
+```
+
+To recover a version, the cycle is reversed:
+
+```text
+Switch Git commit → Read historical data.dvc → dvc pull/checkout → Restore data
+```
+
+## Important DVC terms
+
+| Term | Beginner-friendly meaning |
+| --- | --- |
+| Workspace | The files and directories you currently see in the project |
+| DVC-tracked data | Data described by a `.dvc` file instead of being committed directly to Git |
+| Cache | DVC's local content store, normally inside `.dvc/cache/` |
+| Remote | A second storage location used by `dvc push` and `dvc pull` |
+| Hash | A unique fingerprint calculated from file contents |
+| `data.dvc` | A small YAML metadata file containing the hash and path of the tracked data |
+| Git remote | A Git repository location such as GitHub; this stores code and metadata |
+| DVC remote | Storage for the actual data objects; in this tutorial it is `../S3` |
 
 ## What you will learn
 
@@ -17,6 +95,10 @@ This project creates a small chemistry dataset containing compounds and molecula
 - Restore an older code-and-data version
 - Restore only an older dataset
 - Return safely to the latest version
+
+> **Beginner checkpoint:** By the end, you should be able to explain why Git stores `data.dvc` while DVC stores the CSV contents.
+
+---
 
 ## Git and DVC responsibilities
 
@@ -31,6 +113,21 @@ This project creates a small chemistry dataset containing compounds and molecula
 | `../S3/` | DVC remote | Local storage used to recover cached data objects |
 
 Git stores the code and the DVC pointer. DVC stores the actual versioned data.
+
+### Why are two pushes required?
+
+`git push` and `dvc push` send different things to different places:
+
+| Command | What it sends | Destination in this tutorial |
+| --- | --- | --- |
+| `git push` | Code, README, `.dvc` files, and Git history | GitHub |
+| `dvc push` | Actual contents of `data/` stored as DVC objects | Local `../S3/` folder |
+
+Running only `git push` does not upload the CSV to DVC storage. Running only `dvc push` does not upload your code or `data.dvc` to GitHub. A complete version normally requires both.
+
+> **Key rule:** For every meaningful data version, preserve the DVC object with `dvc push` and preserve its pointer with `git push`.
+
+---
 
 ## Project structure
 
@@ -55,6 +152,15 @@ data/
 └── sample_data.csv
 ```
 
+### What the important files contain
+
+- **`mycode.py`** creates a pandas DataFrame and writes `data/sample_data.csv`.
+- **`data.dvc`** records the hash, size, number of files, and tracked path for the current dataset.
+- **`.dvc/config`** declares `myremote` as the default DVC remote and points it to `../S3`.
+- **`.gitignore`** contains `/data`, so Git will not accidentally store the generated dataset.
+- **`.dvcignore`** can exclude files that DVC should not scan or track.
+- **`requirements.txt`** records the Python packages required to reproduce the exercise.
+
 ## Dataset versions in this repository
 
 The repository history contains three real data versions:
@@ -70,6 +176,10 @@ View the history yourself:
 ```bash
 git log --oneline --all --graph
 ```
+
+The short values such as `91439fe` are Git commit identifiers. They are shortened versions of longer unique hashes. Git accepts these short identifiers as long as they remain unambiguous in the repository.
+
+---
 
 ## Prerequisites
 
@@ -89,12 +199,16 @@ On some macOS and Linux systems, use `python3` instead of `python`.
 
 ## Quick start
 
+Use this section if you want to run the completed project. Use [Build the project from scratch](#build-the-project-from-scratch) if you want to recreate every learning step yourself.
+
 ### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Tosif-Ahmad/DVC_tutorial_from_scratch.git
 cd DVC_tutorial_from_scratch
 ```
+
+`git clone` downloads the Git history, code, configuration, and `data.dvc`. It does **not** download the actual DVC-tracked CSV because the configured DVC remote is a local folder on each user's computer.
 
 ### 2. Create a virtual environment
 
@@ -112,6 +226,8 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
+A virtual environment keeps this project's packages separate from other Python projects. After activation, your terminal usually shows `(.venv)` before the command prompt.
+
 ### 3. Install the dependencies
 
 ```bash
@@ -119,6 +235,8 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 dvc version
 ```
+
+The final command confirms that DVC is installed. If `dvc` is not recognized, confirm that the virtual environment is active and rerun the installation command.
 
 ### 4. Recreate the local DVC remote
 
@@ -144,6 +262,8 @@ Expected remote configuration:
 myremote    ../S3
 ```
 
+The path is interpreted relative to the repository. `..` means “one directory above the current repository,” so this layout keeps the storage folder outside Git's working tree.
+
 Creating this directory gives you an **empty** DVC remote. It does not download the original author's local data objects. Follow [Rebuild all historical versions](#rebuild-all-historical-versions-after-a-fresh-clone) to populate it.
 
 ### 5. Generate and store the latest dataset
@@ -158,9 +278,23 @@ git status
 
 The script creates `data/sample_data.csv`. Because the generated CSV matches V3, `dvc add data/` should not change the committed `data.dvc` file.
 
+What each command does:
+
+1. `python mycode.py` generates the CSV in the workspace.
+2. `dvc add data/` calculates its hash, places its content in the cache, and verifies/updates `data.dvc`.
+3. `dvc status` checks whether workspace data differs from the pointer.
+4. `dvc push` copies missing objects from the cache to `../S3`.
+5. `git status` checks whether any Git-tracked file changed unexpectedly.
+
+> **Quick-start success check:** `data/sample_data.csv` exists, `dvc status` reports no data changes, and `dvc status -c` reports that the cache and remote are synchronized.
+
+---
+
 ## Build the project from scratch
 
 This section explains the workflow used to create the repository.
+
+> **Learning mode:** These steps intentionally track the CSV with Git first and then transfer it to DVC. In a new real project, you can usually initialize DVC and run `dvc add` before ever committing a large dataset to Git.
 
 ### Step 1: Create and clone a Git repository
 
@@ -219,6 +353,8 @@ git push origin main
 
 `dvc init` creates DVC's internal configuration and `.dvcignore` file.
 
+The `.dvc/` directory is not the dataset. It contains DVC configuration and internal files. Most of it is managed automatically, so beginners should avoid editing it manually.
+
 ### Step 5: Create and configure the local remote
 
 From inside the repository:
@@ -234,6 +370,8 @@ git push origin main
 
 The `-d` option makes `myremote` the default remote. Later commands can therefore use `dvc push` and `dvc pull` without specifying `-r myremote`.
 
+Without `-d`, the remote would exist but would not automatically be selected. You would need commands such as `dvc push -r myremote`.
+
 ### Step 6: Stop tracking the dataset with Git
 
 Because `data/` was committed earlier, remove it from Git's index while keeping it on disk:
@@ -245,6 +383,8 @@ git push origin main
 ```
 
 `--cached` is important: it tells Git to stop tracking the directory without deleting your local dataset.
+
+This command may look destructive, but here it removes `data/` only from Git's staging index. Always include `--cached` in this step if you want the local files to remain available for `dvc add`.
 
 ### Step 7: Track the dataset with DVC
 
@@ -264,11 +404,22 @@ git push origin main
 
 `dvc push` then copies the required cached objects to `../S3/`.
 
+At this point:
+
+- GitHub receives `data.dvc`, not `data/sample_data.csv`.
+- `.dvc/cache/` contains a local DVC object for the dataset.
+- `../S3/` receives another copy when `dvc push` runs.
+- `/data` in `.gitignore` prevents accidental Git tracking.
+
 ### Is `dvc commit` required here?
 
 No. A normal `dvc add data/` already stores the data in DVC's local cache and updates `data.dvc`. Running `dvc commit` immediately afterward is redundant.
 
 `dvc commit` is useful in special workflows—for example, after `dvc add --no-commit`, which creates the metadata without storing the data in the cache.
+
+> **First-version checkpoint:** Git tracks `mycode.py`, `data.dvc`, and `.gitignore`; Git ignores `data/`; and the data object exists in both `.dvc/cache/` and `../S3/`.
+
+---
 
 ## Create a new data version
 
@@ -308,6 +459,18 @@ The reliable order is:
 6. Run `dvc push` to store the data object in the DVC remote.
 7. Push the Git commit to GitHub.
 
+### Why commit the code and `data.dvc` together?
+
+Suppose the new code creates five rows but Git stores a `data.dvc` pointer for the previous four-row dataset. Anyone checking out that commit would receive mismatched code and data. Committing both files together makes the commit a reproducible snapshot.
+
+### What should `dvc status` show before and after `dvc add`?
+
+After changing and regenerating the CSV—but before `dvc add`—DVC should report that `data/` has changed. After `dvc add data/`, the workspace data and the updated pointer should agree, so `dvc status` should report that data and pipelines are up to date. Git should then show `mycode.py` and `data.dvc` as modified until they are committed.
+
+> **Versioning checkpoint:** A data version is not fully shareable until its updated `data.dvc` is committed with Git and its data object is pushed with DVC.
+
+---
+
 ## Check that everything is synchronized
 
 ```bash
@@ -321,6 +484,12 @@ Typical clean results are:
 - `git status`: working tree clean
 - `dvc status`: data and pipelines are up to date
 - `dvc status -c`: cache and remote are up to date
+
+These commands inspect three different relationships:
+
+- `git status` compares your Git working tree with the current Git commit.
+- `dvc status` compares workspace data with the DVC pointer.
+- `dvc status -c` compares the local DVC cache with the configured remote.
 
 ## Rebuild all historical versions after a fresh clone
 
@@ -350,6 +519,8 @@ git status
 ```
 
 At each historical commit, `dvc add data/` should reproduce the `data.dvc` pointer already saved in that commit. Do not create a Git commit while in detached HEAD mode.
+
+“Detached HEAD” means Git is showing a historical commit directly instead of placing you on a normal branch. It is safe for viewing and rebuilding old versions. Return to `main` before continuing normal development.
 
 ## Restore an older code-and-data version
 
@@ -384,6 +555,11 @@ dvc pull
 
 Use `dvc checkout` instead of `dvc pull` when the required object already exists in `.dvc/cache/`. `dvc pull` retrieves missing objects from the remote and checks them out into the workspace.
 
+In short:
+
+- `dvc checkout` works from the **local cache**.
+- `dvc pull` first obtains missing objects from the **DVC remote**, then updates the workspace.
+
 ## Restore only an older dataset
 
 The following example keeps the current `mycode.py` but temporarily restores the V1 dataset:
@@ -405,6 +581,10 @@ git status
 ```
 
 Do not commit the older `data.dvc` unless you intentionally want to make that dataset current.
+
+> **Restoration checkpoint:** Always run `git status` before switching versions and again after returning to `main`. This prevents accidental commits of a historical pointer.
+
+---
 
 ## Useful commands cheat sheet
 
@@ -465,6 +645,8 @@ dvc status
 git diff data.dvc
 ```
 
+---
+
 ## Limitations of this learning setup
 
 The local `../S3` remote works well for understanding DVC on one computer, but it is not shared with GitHub or other users. In a collaborative or production project, use shared remote storage such as Amazon S3, Azure Blob Storage, Google Cloud Storage, SSH, or another supported service.
@@ -479,3 +661,119 @@ The local `../S3` remote works well for understanding DVC on one computer, but i
 - [dvc pull](https://dvc.org/doc/command-reference/pull)
 - [dvc checkout](https://dvc.org/doc/command-reference/checkout)
 
+---
+
+## Additional useful DVC commands
+
+The following commands are not all required for this small exercise, but they are valuable as you move toward larger machine-learning projects.
+
+### Project and environment information
+
+| Command | What it does | When it is useful |
+| --- | --- | --- |
+| `dvc version` | Shows the installed DVC version and platform information | Confirming installation or reporting a problem |
+| `dvc doctor` | Displays diagnostic information about DVC and the environment | Troubleshooting unexpected behavior |
+| `dvc root` | Prints the root directory of the current DVC project | Checking whether you are inside the correct project |
+| `dvc config --list` | Lists effective DVC configuration values | Understanding the current configuration |
+
+### Tracking and inspecting data
+
+| Command | What it does | When it is useful |
+| --- | --- | --- |
+| `dvc add <path>` | Starts tracking or updates a data file/directory | Saving a new data version |
+| `dvc status` | Compares workspace data with DVC metadata | Checking whether tracked data changed |
+| `dvc diff` | Compares DVC-tracked data between Git revisions | Understanding which data files were added, deleted, or modified |
+| `dvc list .` | Lists DVC-tracked files available in a DVC repository | Inspecting tracked outputs without manually reading metadata |
+| `dvc check-ignore <path>` | Checks whether a path is ignored by DVC | Debugging `.dvcignore` rules |
+
+Examples:
+
+```bash
+dvc status
+dvc diff HEAD~1 HEAD
+dvc list .
+dvc check-ignore data/temporary.csv
+```
+
+### Cache and workspace commands
+
+| Command | What it does | When it is useful |
+| --- | --- | --- |
+| `dvc checkout` | Restores tracked data from the local cache | After switching Git commits when objects are cached |
+| `dvc fetch` | Downloads data objects to the cache without changing workspace files | Preparing data before a later checkout |
+| `dvc pull` | Fetches required objects and checks them out | Reconstructing the workspace from remote storage |
+| `dvc unprotect <path>` | Makes a cached/linked file safely writable | Before directly editing certain DVC-linked files |
+
+Example difference between `fetch` and `pull`:
+
+```bash
+dvc fetch     # Download objects into .dvc/cache/
+dvc checkout  # Materialize them in the workspace
+
+# dvc pull effectively performs both operations for required outputs
+dvc pull
+```
+
+### Remote-storage commands
+
+| Command | What it does | When it is useful |
+| --- | --- | --- |
+| `dvc remote list` | Lists configured DVC remotes | Confirming remote names and paths |
+| `dvc remote add <name> <url>` | Adds a DVC remote | Configuring local or shared storage |
+| `dvc remote default <name>` | Selects the default remote | Changing which remote normal commands use |
+| `dvc remote modify <name> <option> <value>` | Changes remote settings | Configuring credentials, endpoints, or behavior |
+| `dvc push` | Uploads needed objects from cache to the remote | Publishing a new data version |
+| `dvc status -c` | Compares local cache with remote storage | Checking whether `dvc push` is needed |
+
+Examples for this repository:
+
+```bash
+dvc remote list
+dvc remote default myremote
+dvc status -c
+dvc push
+```
+
+### Pipeline commands for your next DVC project
+
+This repository tracks data with `data.dvc`; it does not yet define a `dvc.yaml` pipeline. When you later create reproducible ML pipelines, these commands become important:
+
+| Command | What it does |
+| --- | --- |
+| `dvc stage add ...` | Defines a reproducible pipeline stage |
+| `dvc repro` | Runs stages whose dependencies have changed |
+| `dvc dag` | Displays the pipeline dependency graph |
+| `dvc params diff` | Compares parameter values between Git revisions |
+| `dvc metrics show` | Displays tracked model metrics |
+| `dvc metrics diff` | Compares metrics between revisions |
+
+### Cleanup commands—use carefully
+
+| Command | What it does | Safety note |
+| --- | --- | --- |
+| `dvc gc --workspace` | Removes unused cache objects not needed by the current workspace | Older versions may stop working locally unless their objects exist in the remote |
+| `dvc remove <file>.dvc` | Stops tracking the output described by a `.dvc` file | Review Git and DVC changes before committing |
+| `dvc destroy` | Removes DVC metadata and configuration from the project | Destructive; do not use casually |
+
+Before any cleanup, verify that important data versions have been pushed:
+
+```bash
+dvc status -c
+dvc push
+```
+
+For this tutorial, you normally do **not** need `dvc gc`, `dvc remove`, or `dvc destroy`. They are listed so you recognize them, not as routine steps.
+
+---
+
+## Final learning check
+
+You have completed the tutorial when you can do all of the following without copying the full workflow:
+
+- Explain the difference between Git storage and DVC storage.
+- Create a changed dataset and save it as a new version.
+- Identify why `data.dvc` changes even though Git ignores `data/`.
+- Push code and data to their correct destinations.
+- Switch to V1 or V2 and restore its matching CSV.
+- Return to `main` and restore V3.
+- Diagnose whether a missing version is absent from the workspace, cache, or remote.
